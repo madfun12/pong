@@ -1,10 +1,11 @@
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
-int WINDOW_WIDTH = 800;
-int WINDOW_HEIGHT = 600;
-int aiSpeed = 2;
+const int WINDOW_WIDTH = 800;
+const int WINDOW_HEIGHT = 600;
+const int aiSpeed = 2;
 
 typedef enum {
     PLAYER,
@@ -49,7 +50,7 @@ Ball createBall(){
     b.width = 20;
     b.vx = 0;
     b.vy = 5;
-    b.px = WINDOW_WIDTH / 2 + (b.width / 2);
+    b.px = WINDOW_WIDTH / 2 - (b.width / 2);
     b.py = WINDOW_HEIGHT / 2 - (b.height / 2);
 
     return b;
@@ -60,10 +61,6 @@ void moveBall(Ball* ball){
     if(ball->px <= 0 || ball->px + ball->width >= WINDOW_WIDTH){
         ball->vx *= -1;
     }
-    if(ball->py <= 0 || ball->py + ball->height >= WINDOW_HEIGHT){
-        ball->vy *= -1;
-    }
-
     ball->px += ball->vx;
     ball->py += ball->vy;
 }
@@ -78,7 +75,7 @@ bool checkCollision(int ax, int ay, int aw, int ah, int bx, int by, int bw, int 
 void moveAIPaddle(Paddle* ai, Ball* ball){
     if(ball->vy < 0){ // Ball is moving toward the AI
         float timeToAIPaddle = ball->py / -ball->vy;
-        int predictedX = ball->px + ball->vx * timeToAIPaddle - (ball->width / 2);
+        int predictedX = floor(ball->px + ball->vx * timeToAIPaddle + (ball->width / 2));
 
         // Reflect off walls if needed
         while(predictedX < 0 || predictedX > WINDOW_WIDTH){
@@ -134,14 +131,14 @@ void updateTexture(SDL_Texture* texture, Uint32* framebuffer){
     void* pixels;
     int pitch;
 
-    if(!SDL_LockTexture(texture, NULL, &pixels, &pitch)){
-        fprintf(stderr, "Failed to lock texture: %s\n", SDL_GetError());
-        return;
-    }
+    // if(!SDL_LockTexture(texture, NULL, &pixels, &pitch)){
+    //     fprintf(stderr, "Failed to lock texture: %s\n", SDL_GetError());
+    //     return;
+    // }
 
     memcpy(pixels, framebuffer, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(Uint32));
 
-    SDL_UnlockTexture(texture);
+    // SDL_UnlockTexture(texture);
 }
 
 int main() {
@@ -171,9 +168,18 @@ int main() {
     Uint32* framebuffer = malloc(WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(Uint32));
     if(!framebuffer){
         fprintf(stderr, "Failed to allocate framebuffer\n");
+        SDL_DestroyWindow(window);
+        SDL_DestroyRenderer(renderer);
+        SDL_Quit();
         return 1;
     } 
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
+    if(!texture){
+        fprintf(stderr, "Failed to create the texture");
+        SDL_DestroyWindow(window);
+        SDL_DestroyRenderer(renderer);
+        SDL_Quit();
+    }
 
     // Create players
     Paddle player = createPaddle(PLAYER);
@@ -210,6 +216,21 @@ int main() {
             }
         }
 
+        if (checkCollision(ball.px, ball.py, ball.width, ball.height, player.px, player.py, player.width, player.height)) {
+            int ballCenterX = ball.px + ball.width / 2;
+            int paddleCenterX = player.px + player.width / 2;
+            int distanceFromCenter = ballCenterX - paddleCenterX;
+            ball.vx = distanceFromCenter / 5; 
+            ball.vy *= -1;
+        }
+        if (checkCollision(ball.px, ball.py, ball.width, ball.height, ai.px, ai.py, ai.width, ai.height)) {
+            int ballCenterX = ball.px + ball.width / 2;
+            int paddleCenterX = ai.px + ai.width / 2;
+            int distanceFromCenter = ballCenterX - paddleCenterX;
+            ball.vx = distanceFromCenter / 5; 
+            ball.vy *= -1;
+        }
+
         int playerSpeed = 10; // Adjust for desired speed
         if(leftPressed && player.px > 0){
             player.px -= playerSpeed;
@@ -220,17 +241,6 @@ int main() {
         }
 
         moveAIPaddle(&ai, &ball);
-
-        if (checkCollision(ball.px, ball.py, ball.width, ball.height, player.px, player.py, player.width, player.height)) {
-            int ballCenterX = ball.px + ball.width / 2;
-            int paddleCenterX = player.px + player.width / 2;
-            int distanceFromCenter = ballCenterX - paddleCenterX;
-            ball.vx = distanceFromCenter / 5; // arbitrary "spin" factor
-            ball.vy *= -1;
-        }
-        if (checkCollision(ball.px, ball.py, ball.width, ball.height, ai.px, ai.py, ai.width, ai.height)) {
-            ball.vy *= -1;
-        }
 
         // Check if ball hits either side
         if(ball.py <= 0){
