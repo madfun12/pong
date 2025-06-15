@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int WINDOW_WIDTH = 1920;
-int WINDOW_HEIGHT = 1080;
+int WINDOW_WIDTH = 800;
+int WINDOW_HEIGHT = 600;
+int aiSpeed = 2;
 
 typedef enum {
     PLAYER,
@@ -29,11 +30,11 @@ typedef struct {
 
 Paddle createPaddle(PaddleType type){
     Paddle p;
-    p.height = 10;
+    p.height = 5;
     p.width = 80;
     if(type == PLAYER){
         p.py = WINDOW_HEIGHT - 20;
-        p.px = 20;
+        p.px = WINDOW_WIDTH - (WINDOW_WIDTH / 2) - (p.width / 2);
     } else{
         p.py = 10;
         p.px = 20;
@@ -46,8 +47,8 @@ Ball createBall(){
     Ball b;
     b.height = 20;
     b.width = 20;
-    b.vx = 1;
-    b.vy = 1;
+    b.vx = 0;
+    b.vy = 5;
     b.px = WINDOW_WIDTH / 2 + (b.width / 2);
     b.py = WINDOW_HEIGHT / 2 - (b.height / 2);
 
@@ -65,6 +66,39 @@ void moveBall(Ball* ball){
 
     ball->px += ball->vx;
     ball->py += ball->vy;
+}
+
+bool checkCollision(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh) {
+    return ax < bx + bw &&
+           ax + aw > bx &&
+           ay < by + bh &&
+           ay + ah > by;
+}
+
+void moveAIPaddle(Paddle* ai, Ball* ball){
+    if(ball->vy < 0){ // Ball is moving toward the AI
+        float timeToAIPaddle = ball->py / -ball->vy;
+        int predictedX = ball->px + ball->vx * timeToAIPaddle - (ball->width / 2);
+
+        // Reflect off walls if needed
+        while(predictedX < 0 || predictedX > WINDOW_WIDTH){
+            if(predictedX < 0){
+                // Ball will go off to the left so invert prediction to account for bounce
+                predictedX = -predictedX;
+            } 
+            else if(predictedX > WINDOW_WIDTH){
+                // Ball will go outside of the window to the right, so
+                predictedX = (2 * WINDOW_WIDTH) - predictedX;
+            }        
+        }
+
+        // Move AI paddle toward predictedX
+        if(ai->px + ai->width / 2 < predictedX){
+            ai->px += aiSpeed;
+        } else if(ai->px + ai->width / 2 > predictedX){
+            ai->px -= aiSpeed;
+        }
+    }
 }
 
 void drawPixels(Uint32* framebuffer, Paddle* player, Paddle* ai, Ball* ball){
@@ -176,12 +210,35 @@ int main() {
             }
         }
 
-        int playerSpeed = 5; // Adjust for desired speed
+        int playerSpeed = 10; // Adjust for desired speed
         if(leftPressed && player.px > 0){
             player.px -= playerSpeed;
         }
+
         if(rightPressed && player.px < WINDOW_WIDTH - player.width){
             player.px += playerSpeed;
+        }
+
+        moveAIPaddle(&ai, &ball);
+
+        if (checkCollision(ball.px, ball.py, ball.width, ball.height, player.px, player.py, player.width, player.height)) {
+            int ballCenterX = ball.px + ball.width / 2;
+            int paddleCenterX = player.px + player.width / 2;
+            int distanceFromCenter = ballCenterX - paddleCenterX;
+            ball.vx = distanceFromCenter / 5; // arbitrary "spin" factor
+            ball.vy *= -1;
+        }
+        if (checkCollision(ball.px, ball.py, ball.width, ball.height, ai.px, ai.py, ai.width, ai.height)) {
+            ball.vy *= -1;
+        }
+
+        // Check if ball hits either side
+        if(ball.py <= 0){
+            ball = createBall();
+        }
+
+        if(ball.py + ball.height >= WINDOW_HEIGHT){
+            ball = createBall();
         }
 
         moveBall(&ball);
@@ -202,7 +259,3 @@ int main() {
 
     return 0;
 }
-
-// TODO: Handle AI movement
-// TODO: Handle object collision
-// TODO: Track score?
